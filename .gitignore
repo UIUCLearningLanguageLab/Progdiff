@@ -3,7 +3,7 @@
 
 # ignore a distributional models repo
 prodiff/distributional_models/
-progdiff/dataset/*
+progdiff/dataset/raw_childes.csv
 
 # macOS
 .DS_Store
