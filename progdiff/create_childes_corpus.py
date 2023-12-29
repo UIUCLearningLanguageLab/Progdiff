@@ -1,4 +1,7 @@
-from distributional_models.datasets.childes import Childes
+try:
+    from progdiff.distributional_models.datasets.childes import Childes
+except:
+    from distributional_models.datasets.childes import Childes
 
 
 def main():
@@ -11,6 +14,7 @@ def main():
     sex_list = None
     add_punctuation = True
     exclude_target_child = True
+    num_documents = 10
 
     the_corpus = Childes()
 
@@ -20,9 +24,14 @@ def main():
                                                   age_range_tuple=age_range_tuple,
                                                   sex_list=sex_list,
                                                   add_punctuation=add_punctuation,
-                                                  exclude_target_child=exclude_target_child)
+                                                  exclude_target_child=exclude_target_child,
+                                                  num_documents=num_documents)
+    print(the_corpus)
+    print(the_corpus.document_info_df)
+    the_corpus.save_to_csv_file("dataset/childes")
+    #the_corpus.save_to_csv_file("dataset/childes.csv")
 
-    the_corpus.save_to_file("dataset/childes.pkl")
+    return the_corpus
 
 
 main()

@@ -1,69 +1,85 @@
-from distributional_models.models.neural_network import NeuralNetwork
-from distributional_models.datasets.childes import Childes
-import torch
-from distributional_models.tasks.cohyponym_task import CohyponymTask
+try:
+    from distributional_models.models.neural_network import NeuralNetwork
+    from distributional_models.tasks.cohyponym_task import CohyponymTask
+    from distributional_models.datasets.childes import Childes
+except:
+    from progdiff.distributional_models.models.neural_network import NeuralNetwork
+    from progdiff.distributional_models.tasks.cohyponym_task import CohyponymTask
+    from progdiff.distributional_models.datasets.childes import Childes
+
+
+def create_corpus(corpus_path, vocab_size, target_list):
+
+    language = "eng"
+    collection_name = None
+    age_range_tuple = (0, 1000)
+    sex_list = None
+    add_punctuation = True
+    exclude_target_child = True
+    num_documents = 0
+
+    the_corpus = Childes()
+    the_corpus.get_documents_from_childes_db_file(input_path=corpus_path,
+                                                  language=language,
+                                                  collection_name=collection_name,
+                                                  age_range_tuple=age_range_tuple,
+                                                  sex_list=sex_list,
+                                                  add_punctuation=add_punctuation,
+                                                  exclude_target_child=exclude_target_child,
+                                                  num_documents=num_documents)
+
+    the_corpus.create_vocab(vocab_size=vocab_size, include_list=target_list, include_unknown=True)
+    return the_corpus
 
 
 def main():
-    vocab_size = 4096
 
-    embedding_size = 64
-    hidden_layer_type_list = ["lstm"]
-    hidden_layer_size_list = [512]
-
-    criterion = torch.nn.CrossEntropyLoss()  # loss function
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-
-    learning_rate = 0.1
-    weight_init = 0.0001
-
-    num_epochs = 1
-
+    #  load the category file
+    category_file_path = "dataset/categories.csv"
     evaluation_layer = 0
-    token_category_dict = {'.': 'PUNCT',
-                           '?': 'PUNCT',
-                           '!': 'PUNCT',
-                           'you': 'PRON',
-                           'i': 'PRON',
-                           'he': 'PRON',
-                           'she': 'PRON',
-                           'mommy': 'NAME',
-                           'daddy': 'NAME',
-                           'baby': 'NAME',
-                           'dog': 'ANIMAL',
-                           'cat': 'ANIMAL',
-                           'mouse': 'ANIMAL',
-                           'run': 'ACTION_VERB',
-                           'jump': 'ACTION_VERB',
-                           'eat': 'ACTION_VERB',
-                           'drink': 'ACTION_VERB',
-                           }
+    sequence_list = None
+    target_list, target_index_dict = CohyponymTask.load_category_file(category_file_path)
 
-    childes_corpus = Childes.load_from_file("dataset/childes.pkl")
-    childes_corpus.create_vocab(vocab_size=vocab_size, include_unknown=True)
+    # load the corpus and create the vocab
+    vocab_size = 1024
+    childes_db_path = 'dataset/raw_childes.csv'
+    childes_pkl_path = 'dataset/childes.pkl'
+    # corpus = create_corpus(childes_db_path, vocab_size, target_list)
+    corpus = Childes.load_from_file(childes_pkl_path)
+    corpus.create_vocab(vocab_size=vocab_size, include_list=target_list, include_unknown=True)
 
-    model = NeuralNetwork(embedding_size, hidden_layer_type_list, hidden_layer_size_list, weight_init, device,
-                          childes_corpus.vocab_index_dict)
+    # set model architecture parameters
+    embedding_size = 0
+    hidden_layer_info_list = [("lstm", 256)]
+    weight_init = 0.0001
+    window_size = None
+    device = 'cpu'
+    criterion = 'cross_entropy'  # loss function
+    model = NeuralNetwork(embedding_size, hidden_layer_info_list, weight_init, corpus.vocab_index_dict, criterion,
+                          device=device)
     print(model.layer_list)
 
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-    model.to(device)
+    num_epochs = 1
+    learning_rate = 0.1
+
+    optimizer = 'adagrad'
+
+    cohyponym_task = CohyponymTask(model,
+                                   evaluation_layer,
+                                   category_file_path,
+                                   sequence_list=sequence_list,
+                                   num_thresholds=21)
 
     for i in range(num_epochs):
-        for j in range(childes_corpus.num_documents):
-            doc_sequence_list = childes_corpus.flatten_corpus_lists(childes_corpus.document_list[j])
-
-            childes_corpus.sequence_list = childes_corpus.create_sequence_list(doc_sequence_list,
-                                                                               childes_corpus.vocab_index_dict,
-                                                                               childes_corpus.unknown_token)
-            took, perplexity = model.train_sequence(childes_corpus.sequence_list, criterion, optimizer)
-
-            cohyponym_task = CohyponymTask(model, evaluation_layer, token_category_dict, sequence_list=None,
-                                           num_thresholds=21)
-            ba = cohyponym_task.best_category_ba_df['ba_mean'].mean()
-            cohyponym_task.save_results("results/childes_ba.csv")
-
-            print(f"doc: {j}/{childes_corpus.num_documents}   took: {took:0.2f}   perplexity: {perplexity:0.2f}   BA: {ba}")
+        for i in range(corpus.num_documents):
+            doc_sequence_list = corpus.flatten_corpus_lists(corpus.document_list[i])
+            corpus.x_list, corpus.y_list = corpus.create_sequence_list(doc_sequence_list,
+                                                                       corpus.vocab_index_dict,
+                                                                       corpus.unknown_token,
+                                                                       window_size=window_size)
+            took, perplexity = model.train_sequence(corpus.x_list, corpus.y_list, criterion, optimizer, learning_rate)
+            mean_ba = cohyponym_task.run_cohyponym_task()
+            print(f"doc: {i}   took: {took:0.2f}   perp: {perplexity:0.2f}   ba: {mean_ba:0.2f}")
 
 
 if __name__ == "__main__":
