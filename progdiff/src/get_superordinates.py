@@ -135,7 +135,7 @@ def print_category_sizes(network):
     sorted_nodes = sorted(node_children_counts.items(), key=lambda x: x[1], reverse=True)
 
     # Write the sorted data to the file
-    with open("../results/category_sizes.csv", "w") as f:
+    with open("../../results/category_sizes.csv", "w") as f:
         for synset_name, count in sorted_nodes:
             if count > 0:
                 f.write(f"{synset_name},{count}\n")
@@ -185,7 +185,7 @@ def main():
     Main function to demonstrate the functionality of the get_wordnet_data function.
     """
     grammatical_category = 'n'
-    vocab_file_path = "../dataset/categories.csv"
+    vocab_file_path = "../../input_data/categories.csv"
 
     # get the vocab dict and filter by grammatical category
     vocab_index_dict = load_category_file(vocab_file_path)

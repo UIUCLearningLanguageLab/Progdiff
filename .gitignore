@@ -3,7 +3,8 @@
 
 # ignore a distributional models repo
 prodiff/distributional_models/
-progdiff/dataset/raw_childes.csv
+input_data/childes.csv
+input_data/raw_childes.csv.zip
 runs/
 
 # macOS
@@ -201,10 +202,3 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
