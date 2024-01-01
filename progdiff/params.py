@@ -11,9 +11,8 @@ param2requests = {
 }
 
 param2default = {
-    'corpus_path': 'input_data/childes',
-    'category_file_path': 'input_data/categories.csv',
-
+    'corpus_path': 'progdiff/dataset/raw_childes.csv',
+    'category_file_path': 'progdiff/dataset/categories.csv',
     'vocab_size': 1024,
     'window_size': None,
 
