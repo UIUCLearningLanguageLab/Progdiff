@@ -195,6 +195,8 @@ def main():
     synset_network = get_wordnet_data(vocab_index_dict, grammatical_category)
     synset_network = add_parents(synset_network)
 
+    plot_network(synset_network)
+
     test_categories(synset_network, vocab_index_dict)
     # category_matrix = create_category_matrix(vocab_set, synset_network)
 

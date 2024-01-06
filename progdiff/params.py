@@ -11,34 +11,36 @@ param2requests = {
 }
 
 param2default = {
-    'corpus_path': 'progdiff/dataset/raw_childes.csv',
-    'category_file_path': 'progdiff/dataset/categories.csv',
-    'vocab_size': 1024,
+    'corpus_path': 'input_data/childes',
+    'category_file_path': 'input_data/categories.csv',
+    'vocab_size': 4096,
     'window_size': None,
 
-    'device': 'cpu',
-    'embedding_size': 16,
-    'hidden_layer_info_list': (("lstm", 256),),
+    'device': 'mps',
+    'embedding_size': 64,
+    'hidden_layer_info_list': (('lstm', 256),),
     'weight_init': 0.0001,
+    'sequence_length': 3,
 
     'criterion': 'cross_entropy',
 
-    'num_epochs': 1,
+    'num_epochs': 10,
     'optimizer': 'adagrad',
-    'learning_rate': 0.1,
+    'learning_rate': 0.01,
     'batch_size': 1,
 
     'evaluation_layer': 0,
     'sequence_list': None,
 
-    'eval_freq': 5,
+    'eval_freq': 10,
 
     'run_cohyponym_task': True,
-    'num_thresholds': 21,
+    'num_thresholds': 31,
 
+    'num_classifiers': 10,
     'run_classifier_task': True,
-    'classifier_hidden_size': 32,
-    'test_proportion': .2,
-    'classifier_epochs': 5,
-    'classifier_lr': .001
+    'classifier_hidden_sizes': [],
+    'test_proportion': .1,
+    'classifier_epochs': 1,
+    'classifier_lr': .2
 }

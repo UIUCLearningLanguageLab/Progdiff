@@ -1,5 +1,9 @@
 import time
-import importlib
+from distributional_models.corpora.childes import Childes
+from distributional_models.tasks.categories import Categories
+from distributional_models.tasks.cohyponym_task import CohyponymTask
+from distributional_models.tasks.classifier import classify
+from distributional_models.models.neural_network import NeuralNetwork
 
 
 def main():
@@ -8,65 +12,56 @@ def main():
 
 
 def progdiff(param2val, run_location):
+
     if run_location == 'local':
-        base_path = 'distributional_models'
-        param2val['corpus_path'] = "../" + param2val['corpus_path']
-        param2val['category_file_path'] = "../" + param2val['category_file_path']
+        param2val['corpus_path'] = "../" + param2val['corpus_path']  # "input_data/childes"
+        param2val['category_file_path'] = "../" + param2val['category_file_path']  # "input_data/categories"
     elif run_location == 'ludwig_local':
-        base_path = 'progdiff.distributional_models'
+        pass
     elif run_location == 'ludwig_cluster':
-        base_path = 'progdiff.distributional_models'
         param2val['corpus_path'] = "/media/ludwig_data/Progdiff/" + param2val['corpus_path']
         param2val['category_file_path'] = "/media/ludwig_data/Progdiff/" + param2val['category_file_path']
     else:
         raise ValueError(f"Unrecognized run location {run_location}")
 
-    categories_class = importlib.import_module(f'{base_path}.tasks.categories').Categories
-    childes_class = importlib.import_module(f'{base_path}.datasets.childes').Childes
-    neural_network_class = importlib.import_module(f'{base_path}.models.neural_network').NeuralNetwork
-    cohyponym_task_class = importlib.import_module(f'{base_path}.tasks.cohyponym_task').CohyponymTask
-
-    classify = importlib.import_module(f'{base_path}.tasks.classifier').classify
-
-    the_categories = init_categories(categories_class, param2val['category_file_path'])
-    the_corpus, missing_words = init_corpus(childes_class,
-                                            param2val['vocab_size'],
+    the_categories = init_categories(param2val['category_file_path'])
+    the_corpus, missing_words = init_corpus(param2val['vocab_size'],
                                             the_categories.instance_list,
                                             param2val['corpus_path'])
     the_categories.remove_instances(missing_words)
-    the_model = init_model(neural_network_class,
-                           the_corpus,
+    the_model = init_model(the_corpus,
                            param2val['embedding_size'],
                            param2val['hidden_layer_info_list'],
                            param2val['weight_init'],
                            param2val['device'],
                            param2val['criterion'])
 
-    performance_dict = train_model(cohyponym_task_class, classify, the_corpus, the_model, the_categories, param2val)
+    performance_dict = train_model(the_corpus, the_model, the_categories, param2val)
 
     return performance_dict
 
 
-def init_categories(categories_class, category_file_path):
-    the_categories = categories_class()
+def init_categories(category_file_path):
+    the_categories = Categories()
     the_categories.create_from_category_file(category_file_path)
     return the_categories
 
 
-def init_corpus(childes_class, vocab_size, include_list, corpus_path):
+def init_corpus(vocab_size, include_list, corpus_path):
     # TODO this can be improved to catch specific exceptions, like is the file there, and the error that will occur
     # if you loaded a childes instance created under a different path
     try:
-        the_corpus = childes_class.load_from_file(corpus_path+'.pkl')
+        the_corpus = Childes.load_from_file(corpus_path+'.pkl')
     except:
-        the_corpus = create_corpus(childes_class, corpus_path+".csv")
+        the_corpus = create_corpus(corpus_path+".csv")
+        the_corpus.save_to_pkl_file(corpus_path)
     missing_words = the_corpus.create_vocab(vocab_size=vocab_size, include_list=include_list, include_unknown=True)
     return the_corpus, missing_words
 
 
-def create_corpus(childes_class, corpus_path, language="eng", collection_name=None, age_range_tuple=(0, 1000),
+def create_corpus(corpus_path, language="eng", collection_name=None, age_range_tuple=(0, 1000),
                   sex_list=None, add_punctuation=True, exclude_target_child=True, num_documents=0):
-    the_corpus = childes_class()
+    the_corpus = Childes()
     the_corpus.get_documents_from_childes_db_file(input_path=corpus_path,
                                                   language=language,
                                                   collection_name=collection_name,
@@ -78,24 +73,23 @@ def create_corpus(childes_class, corpus_path, language="eng", collection_name=No
     return the_corpus
 
 
-def init_model(neural_network_class, corpus, embedding_size, hidden_layer_info_list, weight_init, device, criterion):
-    model = neural_network_class(embedding_size, hidden_layer_info_list, weight_init, corpus.vocab_index_dict,
-                                 criterion, device=device)
+def init_model(corpus, embedding_size, hidden_layer_info_list, weight_init, device, criterion):
+    model = NeuralNetwork(corpus, embedding_size, hidden_layer_info_list, weight_init, criterion, device=device)
     return model
 
 
-def cohyponym_task(cohyponym_task_class, the_categories, num_thresholds):
+def cohyponym_task(the_categories, num_thresholds):
     start_time = time.time()
-    the_cohyponym_task = cohyponym_task_class(the_categories, num_thresholds=num_thresholds)
+    the_cohyponym_task = CohyponymTask(the_categories, num_thresholds=num_thresholds)
     mean_ba = the_cohyponym_task.run_cohyponym_task()
     took = time.time() - start_time
     return the_cohyponym_task, mean_ba, took
 
 
-def classifier_task(classify, the_categories, classifier_hidden_size, test_proportion, classifier_epochs,
+def classifier_task(the_categories, classifier_hidden_sizes, test_proportion, classifier_epochs,
                     classifier_lr):
     start_time = time.time()
-    train_df, test_df = classify(the_categories, classifier_hidden_size, test_proportion=test_proportion,
+    train_df, test_df = classify(the_categories, classifier_hidden_sizes, test_proportion=test_proportion,
                                  num_epochs=classifier_epochs, learning_rate=classifier_lr)
     train_acc = train_df['correct'].mean()
     test_acc = test_df['correct'].mean()
@@ -103,7 +97,7 @@ def classifier_task(classify, the_categories, classifier_hidden_size, test_propo
     return train_df, test_df, train_acc, test_acc, took
 
 
-def train_model(cohyponym_task_class, classify, corpus, model, the_categories, train_params):
+def train_model(corpus, model, the_categories, train_params):
 
     performance_dict = {}
 
@@ -112,15 +106,19 @@ def train_model(cohyponym_task_class, classify, corpus, model, the_categories, t
         tokens = 0
         perplexity_sum = 0
         n = 0
-        for j in range(corpus.num_documents):
+        for j in range(len(corpus.document_list)):
 
             doc_sequence_list = corpus.flatten_corpus_lists(corpus.document_list[j])
             corpus.x_list, corpus.y_list = corpus.create_sequence_list(doc_sequence_list,
                                                                        corpus.vocab_index_dict,
                                                                        corpus.unknown_token,
                                                                        window_size=train_params['window_size'])
-            took, perplexity = model.train_sequence(corpus.x_list, corpus.y_list, train_params['optimizer'],
-                                                    train_params['learning_rate'])
+            took, perplexity = model.train_sequence(corpus.x_list,
+                                                    corpus.y_list,
+                                                    train_params['optimizer'],
+                                                    train_params['learning_rate'],
+                                                    batch_size=train_params['batch_size'],
+                                                    sequence_length=train_params['sequence_length'])
             tokens += len(doc_sequence_list)
             took_sum += took
             perplexity_sum += perplexity*len(doc_sequence_list)
@@ -129,7 +127,7 @@ def train_model(cohyponym_task_class, classify, corpus, model, the_categories, t
             if j % train_params['eval_freq'] == 0:
                 # model training output
                 perplexity_mean = perplexity_sum/tokens
-                output_string = f"{i}-{j}-{tokens:<6}  took:{took_sum:2.2f}  perp:{perplexity_mean:<7.2f}"
+                output_string = f"{i}-{j}-{tokens:<9}  took:{took_sum:2.2f}  perp:{perplexity_mean:<7.2f}"
                 took_sum = 0
                 tokens = 0
                 perplexity_sum = 0
@@ -139,24 +137,33 @@ def train_model(cohyponym_task_class, classify, corpus, model, the_categories, t
                 the_categories.set_instance_feature_matrix(weight_matrix, corpus.vocab_index_dict)
 
                 if train_params['run_cohyponym_task']:
-                    the_cohyponym_task, mean_ba, ba_took = cohyponym_task(cohyponym_task_class,
-                                                                          the_categories,
+                    the_cohyponym_task, mean_ba, ba_took = cohyponym_task(the_categories,
                                                                           train_params['num_thresholds'])
-                    output_string += f"  BA:{mean_ba:0.3f}-{ba_took:2.2f}"
+                    output_string += f"  BA:{mean_ba:0.3f}"
 
                 if train_params['run_classifier_task']:
-                    the_categories.create_xy_lists()
-                    train_df, \
-                        test_df, \
-                        train_acc, \
-                        test_acc, \
-                        classify_took = classifier_task(classify,
-                                                        the_categories,
-                                                        train_params['classifier_hidden_size'],
-                                                        train_params['test_proportion'],
-                                                        train_params['classifier_epochs'],
-                                                        train_params['classifier_lr'])
-                    output_string += f"  Classify:{train_acc:0.3f}-{test_acc:0.3f}-{classify_took:2.2f}"
+
+                    train_sum = 0
+                    test_sum = 0
+
+                    for k in range(train_params['num_classifiers']):
+                        the_categories.create_xy_lists()
+                        train_df, \
+                            test_df, \
+                            train_acc, \
+                            test_acc, \
+                            classify_took = classifier_task(the_categories,
+                                                            train_params['classifier_hidden_sizes'],
+                                                            train_params['test_proportion'],
+                                                            train_params['classifier_epochs'],
+                                                            train_params['classifier_lr'])
+                        train_sum += train_acc
+                        test_sum += test_acc
+
+                    if train_params['num_classifiers'] > 0:
+                        train_mean = train_sum / train_params['num_classifiers']
+                        test_mean = test_sum / train_params['num_classifiers']
+                        output_string += f"  Classify:{train_mean:0.3f}-{test_mean:0.3f}"
 
                 print(output_string)
     return performance_dict
