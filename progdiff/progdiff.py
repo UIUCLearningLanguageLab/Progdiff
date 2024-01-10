@@ -139,8 +139,8 @@ def classifier_task(the_categories, classifier_hidden_sizes, test_proportion, cl
     return train_0_mean, train_1_mean, train_final_mean, test_0_mean, test_1_mean, test_final_mean, took
 
 
-def prepare_batches(corpus, model, train_params):
-    doc_index_list = corpus.flatten_corpus_lists(corpus.document_list[j])
+def prepare_batches(document_index, corpus, model, train_params):
+    doc_index_list = corpus.flatten_corpus_lists(corpus.document_list[document_index])
 
     corpus.x_list, corpus.y_list = corpus.create_index_list(doc_index_list,
                                                             corpus.vocab_index_dict,
@@ -214,7 +214,7 @@ def train_model(corpus, model, the_categories, train_params):
         for j in range(len(corpus.document_list)):
 
             start_time = time.time()
-            x_batches, y_batches = prepare_batches(corpus, model, train_params)
+            x_batches, y_batches = prepare_batches(j, corpus, model, train_params)
 
             hidden = (torch.zeros(1, train_params['batch_size'], model.hidden_size).to(model.device),
                       torch.zeros(1, train_params['batch_size'], model.hidden_size).to(model.device))
