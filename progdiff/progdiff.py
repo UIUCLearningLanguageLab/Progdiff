@@ -1,4 +1,6 @@
 import time
+import os
+from datetime import datetime
 import torch
 from distributional_models.corpora.childes import Childes
 from distributional_models.tasks.categories import Categories
@@ -16,16 +18,7 @@ def main():
 
 def progdiff(param2val, run_location):
 
-    if run_location == 'local':
-        param2val['corpus_path'] = "../" + param2val['corpus_path']  # "input_data/childes"
-        param2val['category_file_path'] = "../" + param2val['category_file_path']  # "input_data/categories"
-    elif run_location == 'ludwig_local':
-        pass
-    elif run_location == 'ludwig_cluster':
-        param2val['corpus_path'] = "/media/ludwig_data/Progdiff/" + param2val['corpus_path']
-        param2val['category_file_path'] = "/media/ludwig_data/Progdiff/" + param2val['category_file_path']
-    else:
-        raise ValueError(f"Unrecognized run location {run_location}")
+    param2val = fix_paths(param2val, run_location)
 
     the_categories = init_categories(param2val['category_file_path'])
     the_corpus, missing_words = init_corpus(param2val['vocab_size'],
@@ -33,6 +26,9 @@ def progdiff(param2val, run_location):
                                             param2val['corpus_path'])
 
     the_categories.remove_instances(missing_words)
+
+    prep_output(param2val)
+
     the_model = init_model(the_corpus,
                            param2val['sequence_length'],
                            param2val['embedding_size'],
@@ -43,6 +39,41 @@ def progdiff(param2val, run_location):
     performance_dict = train_model(the_corpus, the_model, the_categories, param2val)
 
     return performance_dict
+
+
+def fix_paths(train_params, run_location):
+
+    if run_location == 'local':
+        train_params['corpus_path'] = "../" + train_params['corpus_path']  # "input_data/childes"
+        train_params['category_file_path'] = "../" + train_params['category_file_path']  # "input_data/categories"
+        train_params['save_path'] = "../" + train_params['save_path']  # "models/"
+
+    elif run_location == 'ludwig_local':
+        pass
+
+    elif run_location == 'ludwig_cluster':
+        train_params['corpus_path'] = "/media/ludwig_data/Progdiff/" + train_params['corpus_path']
+        train_params['category_file_path'] = "/media/ludwig_data/Progdiff/" + train_params['category_file_path']
+        # TODO fix save_path for ludwig so it ends up in the same runs folder
+
+    else:
+        raise ValueError(f"Unrecognized run location {run_location}")
+
+    train_params['save_path'] += train_params['hidden_layer_info_list'][0][0]
+
+    train_params['save_path'] += f"_{train_params['vocab_size']}"
+    train_params['save_path'] += f"_{train_params['embedding_size']}"
+    train_params['save_path'] += f"_{train_params['hidden_layer_info_list'][0][1]}"
+
+    now = datetime.now()
+    date_time_string = now.strftime("%Y%m%d_%H%M%S")
+    train_params['save_path'] += f"_{date_time_string}"
+
+    return train_params
+
+
+def prep_output(train_params):
+    os.mkdir(train_params['save_path'])
 
 
 def init_categories(category_file_path):
@@ -246,6 +277,9 @@ def train_model(corpus, model, the_categories, train_params):
                 evaluate_model(i, j, model, the_categories, corpus, train_params, training_took, loss_sum, tokens_sum)
                 loss_sum = 0
                 tokens_sum = 0
+
+            if j % train_params['save_freq'] == 0:
+                model.save_model(train_params['save_path']+f"/e{i}_d{j}.pth")
 
     return performance_dict
 

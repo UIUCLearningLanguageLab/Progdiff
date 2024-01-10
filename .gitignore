@@ -6,6 +6,7 @@ prodiff/distributional_models/
 input_data/childes.csv
 input_data/childes.csv.zip
 runs/
+models/
 
 # macOS
 .DS_Store

@@ -33,6 +33,8 @@ param2default = {
     'sequence_list': None,
 
     'eval_freq': 100,
+    'save_freq': 100,
+    'save_path': 'models/',
 
     'run_cohyponym_task': True,
     'num_thresholds': 31,
