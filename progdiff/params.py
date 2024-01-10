@@ -29,7 +29,7 @@ param2default = {
     'learning_rate': 0.001,
     'batch_size': 64,
 
-    'evaluation_layer': 1,
+    'evaluation_layer': 'lstm',
     'sequence_list': None,
 
     'eval_freq': 100,

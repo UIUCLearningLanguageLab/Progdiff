@@ -4,8 +4,9 @@ from distributional_models.corpora.childes import Childes
 from distributional_models.tasks.categories import Categories
 from distributional_models.tasks.cohyponym_task import CohyponymTask
 from distributional_models.tasks.classifier import classify
-from distributional_models.models.lstm import SimpleLSTM
-import torch.optim as optim
+from distributional_models.models.srn import SRN
+from distributional_models.models.lstm import LSTM
+from distributional_models.models.mlp import MLP
 
 
 def main():
@@ -37,8 +38,7 @@ def progdiff(param2val, run_location):
                            param2val['embedding_size'],
                            param2val['hidden_layer_info_list'],
                            param2val['weight_init'],
-                           param2val['device'],
-                           param2val['criterion'])
+                           param2val['device'])
 
     performance_dict = train_model(the_corpus, the_model, the_categories, param2val)
 
@@ -77,14 +77,18 @@ def create_corpus(corpus_path, language="eng", collection_name=None, age_range_t
     return the_corpus
 
 
-def init_model(corpus, block_size, embedding_size, hidden_layer_info_list, weight_init, device, criterion):
-    model = SimpleLSTM(corpus,
-                       block_size,
-                       embedding_size,
-                       hidden_layer_info_list,
-                       weight_init,
-                       criterion,
-                       device=device)
+def init_model(corpus, block_size, embedding_size, hidden_layer_info_list, weight_init, device):
+    if hidden_layer_info_list[0][0] == 'lstm':
+        hidden_size = hidden_layer_info_list[0][1]
+        model = LSTM(corpus, embedding_size, hidden_size, weight_init, device)
+    elif hidden_layer_info_list[0][0] == 'srn':
+        hidden_size = hidden_layer_info_list[0][1]
+        model = SRN(corpus, embedding_size, hidden_size, weight_init, device)
+    elif hidden_layer_info_list[0][0] == 'mlp':
+        hidden_size = hidden_layer_info_list[0][1]
+        model = MLP(corpus, embedding_size, hidden_size, weight_init, device)
+    else:
+        raise ValueError(f"Unrecognized model type {hidden_layer_info_list[0][0]}")
     return model
 
 
@@ -139,13 +143,13 @@ def classifier_task(the_categories, classifier_hidden_sizes, test_proportion, cl
     return train_0_mean, train_1_mean, train_final_mean, test_0_mean, test_1_mean, test_final_mean, took
 
 
-def prepare_batches(document_index, corpus, model, train_params):
-    doc_index_list = corpus.flatten_corpus_lists(corpus.document_list[document_index])
+def prepare_batches(document_list, corpus, model, train_params):
+    doc_index_list = corpus.flatten_corpus_lists(document_list)
 
-    corpus.x_list, corpus.y_list = corpus.create_index_list(doc_index_list,
-                                                            corpus.vocab_index_dict,
-                                                            corpus.unknown_token,
-                                                            window_size=train_params['window_size'])
+    corpus.x_list, corpus.y_list, corpus.index_list = corpus.create_index_list(doc_index_list,
+                                                                               corpus.vocab_index_dict,
+                                                                               corpus.unknown_token,
+                                                                               window_size=train_params['window_size'])
     index_list = corpus.x_list + [corpus.y_list[-1]]
 
     sequence_list = corpus.create_sequence_lists(index_list, train_params['sequence_length'], 0)
@@ -201,11 +205,10 @@ def evaluate_model(i, j, model, the_categories, corpus, train_params, training_t
 def train_model(corpus, model, the_categories, train_params):
 
     performance_dict = {}
-
     model.train()
 
-    optimizer = optim.Adam(model.parameters(), lr=train_params['learning_rate'])
-    criterion = torch.nn.CrossEntropyLoss()
+    model.set_optimizer(train_params['optimizer'], train_params['learning_rate'])
+    model.set_criterion(train_params['criterion'])
 
     for i in range(train_params['num_epochs']):
         loss_sum = 0
@@ -214,22 +217,25 @@ def train_model(corpus, model, the_categories, train_params):
         for j in range(len(corpus.document_list)):
 
             start_time = time.time()
-            x_batches, y_batches = prepare_batches(j, corpus, model, train_params)
-
-            hidden = (torch.zeros(1, train_params['batch_size'], model.hidden_size).to(model.device),
-                      torch.zeros(1, train_params['batch_size'], model.hidden_size).to(model.device))
+            x_batches, y_batches = prepare_batches(corpus.document_list[j], corpus, model, train_params)
+            model.init_network(train_params['batch_size'], train_params['sequence_length'])
 
             for x_batch, y_batch in zip(x_batches, y_batches):
 
-                optimizer.zero_grad()
-                output, hidden = model(x_batch, hidden)
-                hidden = (hidden[0].detach(), hidden[1].detach())
+                model.optimizer.zero_grad()
+                output = model(x_batch)
 
-                loss = criterion(output.view(-1, corpus.vocab_size), y_batch.view(-1))
+                if 'lstm' in model.hidden_dict:
+                    model.hidden_dict['lstm'] = (model.hidden_dict['lstm'][0].detach(),
+                                                 model.hidden_dict['lstm'][1].detach())
+                elif 'srn' in model.hidden_dict:
+                    model.hidden_dict['srn'] = model.hidden_dict['srn'].detach()
+
+                loss = model.criterion(output.view(-1, corpus.vocab_size), y_batch.view(-1))
                 mask = y_batch.view(-1) != 0
                 loss = (loss * mask).mean()
                 loss.backward()
-                optimizer.step()
+                model.optimizer.step()
 
                 loss_sum += loss.item()
                 tokens_sum += train_params['batch_size']
