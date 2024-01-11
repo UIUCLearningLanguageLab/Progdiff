@@ -185,13 +185,13 @@ def prepare_batches(document_list, corpus, model, train_params):
 
     sequence_list = corpus.create_sequence_lists(index_list, train_params['sequence_length'], 0)
 
-    x_batches, y_batches = corpus.create_batches(sequence_list, train_params['batch_size'],
+    x_batches, y_batches, y_window_batches = corpus.create_batches(sequence_list, train_params['batch_size'],
                                                  train_params['sequence_length'], 0)
 
     x_batches = [torch.tensor(x_batch, dtype=torch.long).to(model.device) for x_batch in x_batches]
     y_batches = [torch.tensor(y_batch, dtype=torch.long).to(model.device) for y_batch in y_batches]
 
-    return x_batches, y_batches
+    return x_batches, y_batches, y_window_batches
 
 
 def evaluate_model(i, j, model, the_categories, corpus, train_params, training_took, loss_sum, tokens_sum):
@@ -248,7 +248,7 @@ def train_model(corpus, model, the_categories, train_params):
         for j in range(len(corpus.document_list)):
 
             start_time = time.time()
-            x_batches, y_batches = prepare_batches(corpus.document_list[j], corpus, model, train_params)
+            x_batches, y_batches, y_window_batches = prepare_batches(corpus.document_list[j], corpus, model, train_params)
             model.init_network(train_params['batch_size'], train_params['sequence_length'])
 
             for x_batch, y_batch in zip(x_batches, y_batches):
